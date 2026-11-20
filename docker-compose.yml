@@ -1,0 +1,75 @@
+x-app-env: &app-env
+  APIRADAR_DATABASE_URL: postgresql+psycopg://apiradar:apiradar@db:5432/apiradar
+  APIRADAR_REDIS_URL: redis://redis:6379/0
+  APIRADAR_GITHUB_TOKEN: ${APIRADAR_GITHUB_TOKEN:-}
+  APIRADAR_GITHUB_APP_ID: ${APIRADAR_GITHUB_APP_ID:-}
+  APIRADAR_GITHUB_APP_PRIVATE_KEY: ${APIRADAR_GITHUB_APP_PRIVATE_KEY:-}
+  APIRADAR_GITHUB_WEBHOOK_SECRET: ${APIRADAR_GITHUB_WEBHOOK_SECRET:-change-me}
+  APIRADAR_AUTO_PR: ${APIRADAR_AUTO_PR:-false}
+  APIRADAR_SCAN_INTERVAL_MINUTES: ${APIRADAR_SCAN_INTERVAL_MINUTES:-360}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: apiradar
+      POSTGRES_PASSWORD: apiradar
+      POSTGRES_DB: apiradar
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apiradar -d apiradar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    command: python -m app.cli initdb
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment: *app-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: celery -A app.workers.celery_app.celery_app worker --loglevel=info --concurrency=2
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: .
+    command: celery -A app.workers.celery_app.celery_app beat --loglevel=info
+    environment: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

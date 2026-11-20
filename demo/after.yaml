@@ -1,0 +1,186 @@
+openapi: 3.0.3
+info:
+  title: Petstore API
+  version: 2.0.0
+  description: Petstore API v2 — introduces several breaking changes on purpose.
+servers:
+  - url: https://api.petstore.dev/v2
+security:
+  - apiKey: []
+paths:
+  /pets:
+    get:
+      operationId: listAllPets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 200
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            maximum: 50
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [available, sold]
+      responses:
+        "200":
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pet"
+            text/csv:
+              schema:
+                type: string
+    post:
+      operationId: createPet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewPet"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+  /pets/{petId}:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getPet
+      responses:
+        "200":
+          description: A pet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+  /v2/owners/{ownerId}:
+    parameters:
+      - name: ownerId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getOwnerV2
+      responses:
+        "200":
+          description: An owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Owner"
+  /store/orders:
+    post:
+      operationId: createOrder
+      parameters:
+        - name: X-Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewOrder"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "409":
+          description: Conflict
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    Pet:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 32
+        created_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [available, sold, archived]
+        owner:
+          $ref: "#/components/schemas/Owner"
+    NewPet:
+      allOf:
+        - $ref: "#/components/schemas/Pet"
+        - type: object
+          required: [microchip]
+          properties:
+            microchip:
+              type: string
+    Order:
+      type: object
+      required: [id, petId, quantity]
+      properties:
+        id:
+          type: string
+          format: uuid
+        petId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        note:
+          type: string
+    NewOrder:
+      type: object
+      required: [petId, quantity]
+      properties:
+        petId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        note:
+          type: string
+    Owner:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        pets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Pet"
